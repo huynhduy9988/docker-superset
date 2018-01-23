@@ -32,6 +32,7 @@ RUN pip install --upgrade setuptools pip
 # clone superset from github
 WORKDIR /usr/local
 ARG SUPERSET_VERSION=master
+ARG PIP_DEPS='kylinpy '
 RUN git clone -b ${SUPERSET_VERSION} https://github.com/apache/incubator-superset.git
 RUN pip install ${PIP_DEPS}
 RUN pip install -e incubator-superset
