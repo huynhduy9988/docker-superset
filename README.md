@@ -1,14 +1,16 @@
 # About this Repo
 
-This is the Git repo of the Apache Superset(incubating) with kylinpy. This image has been specially optimized for China region.
+This is the Git repo of the Apache Superset(incubating) with kylinpy. Provide Apache Kylin datasource query capability.
 
 # Usage
 
-Build docker image and run it.
+```
+$ docker run -d -p 8088:8088 --name superset kyligence/superset
+$ docker exec -it superset superset-init
+```
 
-```
-$ git clone https://github.com/Kyligence/docker-superset.git
-$ cd docker-superset
-$ make
-$ make run
-```
+# References
+
+- [Apache Kylin](http://kylin.apache.org/)
+- [Superset](https://github.com/apache/incubator-superset)
+
