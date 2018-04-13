@@ -1,59 +1,66 @@
-FROM python:2.7.13-slim
-ENV DEBIAN_FRONTEND noninteractive
+FROM debian:stretch
 
-ARG REGION
-ARG CN_MIRROR='\
-deb http://mirrors.163.com/debian/ jessie main non-free contrib\n\
-deb http://mirrors.163.com/debian/ jessie-updates main non-free contrib\n\
-deb http://mirrors.163.com/debian/ jessie-backports main non-free contrib\n\
-deb-src http://mirrors.163.com/debian/ jessie main non-free contrib\n\
-deb-src http://mirrors.163.com/debian/ jessie-updates main non-free contrib\n\
-deb-src http://mirrors.163.com/debian/ jessie-backports main non-free contrib\n\
-deb http://mirrors.163.com/debian-security/ jessie/updates main non-free contrib\n\
-deb-src http://mirrors.163.com/debian-security/ jessie/updates main non-free contrib\n\
-'
-RUN if [ "${REGION}" = "cn" ]; then echo ${CN_MIRROR} > /etc/apt/sources.list; fi
+# Superset version
+ARG SUPERSET_VERSION=0.24.0
+ARG KYLINPY_VERSION=1.0.10
 
-# Install nodejs and yarn
-ARG BUILD_DEPS='apt-utils apt-transport-https curl git'
-RUN apt-get -y update && apt-get -y install ${BUILD_DEPS}
-RUN curl -sL https://deb.nodesource.com/setup_8.x | bash -
-RUN apt-get install -y nodejs
-RUN curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add -
-RUN echo "deb https://dl.yarnpkg.com/debian/ stable main" | tee /etc/apt/sources.list.d/yarn.list
-RUN apt-get -y update && apt-get install -y yarn
-RUN if [ "${REGION}" = "cn" ]; then yarn config set registry https://registry.npm.taobao.org; fi
+# Configure environment
+ENV LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
+    PYTHONPATH=/etc/superset:/home/superset:$PYTHONPATH \
+    SUPERSET_VERSION=${SUPERSET_VERSION} \
+    SUPERSET_HOME=/var/lib/superset
 
-# prepare superset depandences
-ARG DEPS='build-essential libssl-dev libffi-dev python-dev libsasl2-dev libldap2-dev'
-RUN apt-get -y install ${DEPS}
-RUN pip install --upgrade setuptools pip
+# Create superset user & install dependencies
+RUN useradd -U -m superset && \
+    mkdir /etc/superset  && \
+    mkdir ${SUPERSET_HOME} && \
+    chown -R superset:superset /etc/superset && \
+    chown -R superset:superset ${SUPERSET_HOME} && \
+    apt-get update && \
+    apt-get install -y \
+        build-essential \
+        curl \
+        default-libmysqlclient-dev \
+        libffi-dev \
+        libldap2-dev \
+        libpq-dev \
+        libsasl2-dev \
+        libssl-dev \
+        openjdk-8-jdk \
+        python-dev \
+        python-pip && \
+    apt-get clean && \
+    rm -r /var/lib/apt/lists/* && \
+    pip install --no-cache-dir \
+        flask-cors==3.0.3 \
+        flask-mail==0.9.1 \
+        flask-oauth==0.12 \
+        flask_oauthlib==0.9.3 \
+        gevent==1.2.2 \
+        impyla==0.14.0 \
+        mysqlclient==1.3.7 \
+        psycopg2==2.6.1 \
+        pyathenajdbc==1.2.0 \
+        pyhive==0.5.0 \
+        pyldap==2.4.28 \
+        redis==2.10.5 \
+        sqlalchemy-redshift==0.5.0 \
+        sqlalchemy-clickhouse==0.1.1.post3 \
+        Werkzeug==0.12.1 \
+        superset==${SUPERSET_VERSION} \
+        kylinpy==${KYLINPY_VERSION}
 
-# clone superset from github
-WORKDIR /usr/local
-ARG SUPERSET_VERSION=master
-ARG PIP_DEPS='kylinpy '
-RUN git clone -b ${SUPERSET_VERSION} https://github.com/apache/incubator-superset.git
-RUN pip install ${PIP_DEPS}
-RUN pip install -e incubator-superset
+# Configure Filesystem
+COPY superset /usr/local/bin
+VOLUME /home/superset \
+       /etc/superset \
+       /var/lib/superset
+WORKDIR /home/superset
 
-# init superset
-RUN fabmanager create-admin --app superset --username admin --password admin --firstname admin --lastname admin --email admin@fab.org
-RUN superset db upgrade
-RUN superset load_examples
-RUN superset init
-
-# build js
-WORKDIR /usr/local/incubator-superset/superset/assets
-RUN yarn && yarn run build
-# todo: starts with mapbox token
-
-WORKDIR /root
-
-# remove dependent packages if on production
-# RUN apt-get remove --purge -y ${BUILD_DEPS} nodejs yarn
-# RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-# RUN rm -rf /usr/local/incubator-superset/superset/assets/node_modules
-
+# Deploy application
 EXPOSE 8088
+HEALTHCHECK CMD ["curl", "-f", "http://localhost:8088/health"]
 ENTRYPOINT ["superset"]
+CMD ["runserver"]
+USER superset
